@@ -37,9 +37,24 @@ public class AuthService {
     private final JwtTokenProvider tokenProvider;
     private final EmailService emailService;
 
-    // 1. USER REGISTRATION
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
+            User existingUser = userRepository.findByEmail(request.getEmail())
+                    .orElseThrow(() -> new IllegalStateException("User should exist"));
+            if (!existingUser.getEmailVerified()) {
+                deleteAllEmailVerifcationTokenForUser(existingUser);
+
+                String verificationToken = generateAndSaveEmailVerificationToken(existingUser);
+
+                emailService.sendVerificationEmail(existingUser.getEmail(), existingUser.getName(), verificationToken);
+                log.info("Verification email sent to: {}", existingUser.getEmail());
+
+                String accessToken = tokenProvider.generateAccessTokenFromEmail(existingUser.getEmail());
+                String refreshToken = generateAndSaveRefreshToken(existingUser);
+
+                return buildAuthResponse(existingUser, accessToken, refreshToken);
+            }
+
             throw new BadRequestException("Email already registered");
         }
 
@@ -53,21 +68,17 @@ public class AuthService {
         User savedUser = userRepository.save(user);
         log.info("New user registered: {}", savedUser.getEmail());
 
-        // Generate and save email verification token
         String verificationToken = generateAndSaveEmailVerificationToken(savedUser);
 
-        // Send verification email
         emailService.sendVerificationEmail(savedUser.getEmail(), savedUser.getName(), verificationToken);
         log.info("Verification email sent to: {}", savedUser.getEmail());
 
-        // Generate tokens
         String accessToken = tokenProvider.generateAccessTokenFromEmail(savedUser.getEmail());
         String refreshToken = generateAndSaveRefreshToken(savedUser);
 
         return buildAuthResponse(savedUser, accessToken, refreshToken);
     }
 
-    // 2. EMAIL VERIFICATION
     public MessageResponse verifyEmail(String token) {
         EmailVerificationToken verificationToken = emailTokenRepository.findByToken(token)
                 .orElseThrow(() -> new BadRequestException("Invalid verification token"));
@@ -85,11 +96,12 @@ public class AuthService {
         verificationToken.setUsedAt(LocalDateTime.now());
         emailTokenRepository.save(verificationToken);
 
+        deleteAllEmailVerifcationTokenForUser(user);
+
         log.info("Email verified for user: {}", user.getEmail());
         return new MessageResponse("Email verified successfully", true);
     }
 
-    // 3. USER LOGIN
     public AuthResponse login(LoginRequest request) {
         try {
             Authentication authentication = authenticationManager.authenticate(
@@ -118,7 +130,6 @@ public class AuthService {
         }
     }
 
-    // 4. REFRESH TOKEN
     public AuthResponse refreshAccessToken(RefreshTokenRequest request) {
         RefreshToken refreshToken = refreshTokenRepository.findByToken(request.getRefreshToken())
                 .orElseThrow(() -> new BadRequestException("Invalid refresh token"));
@@ -145,7 +156,6 @@ public class AuthService {
                 .build();
     }
 
-    // 5. LOGOUT
     public MessageResponse logout(String refreshToken) {
         RefreshToken token = refreshTokenRepository.findByToken(refreshToken)
                 .orElseThrow(() -> new BadRequestException("Invalid refresh token"));
@@ -158,7 +168,6 @@ public class AuthService {
         return new MessageResponse("Logged out successfully", true);
     }
 
-    // 6. GENERATE REFRESH TOKEN
     private String generateAndSaveRefreshToken(User user) {
         RefreshToken refreshToken = new RefreshToken();
         refreshToken.setToken(tokenProvider.generateRefreshToken());
@@ -170,7 +179,6 @@ public class AuthService {
         return refreshToken.getToken();
     }
 
-    // 7. GENERATE EMAIL VERIFICATION TOKEN
     private String generateAndSaveEmailVerificationToken(User user) {
         EmailVerificationToken token = new EmailVerificationToken();
         token.setToken(UUID.randomUUID().toString());
@@ -182,7 +190,10 @@ public class AuthService {
         return token.getToken();
     }
 
-    // 8. BUILD AUTH RESPONSE
+    private long deleteAllEmailVerifcationTokenForUser(User user) {
+        return emailTokenRepository.deleteByUser(user);
+    }
+
     private AuthResponse buildAuthResponse(User user, String accessToken, String refreshToken) {
         return AuthResponse.builder()
                 .id(user.getId())
@@ -198,14 +209,12 @@ public class AuthService {
                 .build();
     }
 
-    // 9. GET USER BY EMAIL
     public User getUserByEmail(String email) {
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
     }
 
-    // 10. GET USER BY ID
-    public User getUserById(Long userId) {
+    public User getUserById(UUID userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
     }

@@ -30,30 +30,25 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
 
-    // GET CURRENT USER PROFILE
     @Transactional(readOnly = true)
-    public UserResponse getCurrentUser(Long userId) {
+    public UserResponse getCurrentUser(UUID userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         return convertToUserResponse(user);
     }
 
-    // CHANGE PASSWORD
-    public MessageResponse changePassword(Long userId, ChangePasswordRequest request) {
+    public MessageResponse changePassword(UUID userId, ChangePasswordRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // Verify current password
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
             log.warn("Incorrect current password for user: {}", user.getEmail());
             throw new UnauthorizedException("Current password is incorrect");
         }
 
-        // Update password
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
 
-        // Revoke all existing refresh tokens for security
         refreshTokenRepository.deleteByUser(user);
 
         log.info("Password changed for user: {}", user.getEmail());
@@ -62,8 +57,7 @@ public class UserService {
         return new MessageResponse("Password changed successfully", true);
     }
 
-    // CHANGE NAME
-    public UserResponse changeName(Long userId, ChangeNameRequest request) {
+    public UserResponse changeName(UUID userId, ChangeNameRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
@@ -74,22 +68,18 @@ public class UserService {
         return convertToUserResponse(updatedUser);
     }
 
-    // REQUEST EMAIL CHANGE
-    public MessageResponse requestEmailChange(Long userId, ChangeEmailRequest request) {
+    public MessageResponse requestEmailChange(UUID userId, ChangeEmailRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // Check if new email is already in use
         if (userRepository.existsByEmail(request.getNewEmail())) {
             throw new BadRequestException("Email already registered");
         }
 
-        // Same email check
         if (user.getEmail().equals(request.getNewEmail())) {
             throw new BadRequestException("New email must be different from current email");
         }
 
-        // Generate email change verification token
         EmailVerificationToken token = new EmailVerificationToken();
         token.setToken(UUID.randomUUID().toString());
         token.setUser(user);
@@ -99,14 +89,12 @@ public class UserService {
 
         emailTokenRepository.save(token);
 
-        // Send verification email to NEW email
         emailService.sendEmailChangeVerification(request.getNewEmail(), user.getName(), token.getToken());
 
         log.info("Email change requested for user: {}", user.getEmail());
         return new MessageResponse("Verification email sent to new email address", true);
     }
 
-    // VERIFY EMAIL CHANGE
     public MessageResponse verifyEmailChange(String token) {
         EmailVerificationToken emailToken = emailTokenRepository.findByToken(token)
                 .orElseThrow(() -> new BadRequestException("Invalid email change token"));
@@ -121,16 +109,12 @@ public class UserService {
 
         User user = emailToken.getUser();
 
-        // Update email
-        user.setEmail(emailToken.getUser().getEmail()); // This should be the new email stored somewhere
-        // For now, we'll store it in a temp field or retrieve from context
-        // Better approach: create separate entity for pending email changes
+        user.setEmail(emailToken.getUser().getEmail());
 
         user.setEmailVerified(true);
         user.setEmailVerifiedAt(LocalDateTime.now());
         userRepository.save(user);
 
-        // Mark token as used
         emailToken.setUsed(true);
         emailToken.setUsedAt(LocalDateTime.now());
         emailTokenRepository.save(emailToken);
@@ -139,7 +123,6 @@ public class UserService {
         return new MessageResponse("Email changed successfully", true);
     }
 
-    // CONVERT TO DTO
     private UserResponse convertToUserResponse(User user) {
         return UserResponse.builder()
                 .id(user.getId())

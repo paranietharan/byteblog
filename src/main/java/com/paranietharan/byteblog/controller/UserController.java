@@ -1,6 +1,7 @@
 package com.paranietharan.byteblog.controller;
 
 import com.paranietharan.byteblog.dto.*;
+import com.paranietharan.byteblog.entity.User;
 import com.paranietharan.byteblog.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -8,8 +9,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
 
 @Slf4j
 @RestController
@@ -19,31 +21,18 @@ public class UserController {
 
     private final UserService userService;
 
-    private Long getCurrentUserId() {
+    private UUID getCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() instanceof UserDetails) {
-            UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-            // Extract user ID from authentication - you may need to modify this based on your implementation
-            // For now, we'll use a header or modify the authentication principal
-            String email = userDetails.getUsername();
-            // This is a placeholder - in real implementation, you'd store user ID in token or context
-            return extractUserIdFromContext();
+        if (authentication != null && authentication.getPrincipal() instanceof User user) {
+            return user.getId();
         }
         throw new IllegalArgumentException("User not authenticated");
-    }
-
-    private Long extractUserIdFromContext() {
-        // This should be extracted from JWT token or SecurityContext
-        // For now, returning a placeholder that will be replaced with proper implementation
-        String userId = SecurityContextHolder.getContext().getAuthentication().getName();
-        // In production, implement proper user ID extraction
-        return null;
     }
 
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser() {
         log.info("Get current user profile");
-        Long userId = getCurrentUserId();
+        UUID userId = getCurrentUserId();
         UserResponse response = userService.getCurrentUser(userId);
         return ResponseEntity.ok(response);
     }
@@ -52,7 +41,7 @@ public class UserController {
     public ResponseEntity<MessageResponse> changePassword(
             @Valid @RequestBody ChangePasswordRequest request) {
         log.info("Change password request");
-        Long userId = getCurrentUserId();
+        UUID userId = getCurrentUserId();
         MessageResponse response = userService.changePassword(userId, request);
         return ResponseEntity.ok(response);
     }
@@ -61,7 +50,7 @@ public class UserController {
     public ResponseEntity<UserResponse> changeName(
             @Valid @RequestBody ChangeNameRequest request) {
         log.info("Change name request");
-        Long userId = getCurrentUserId();
+        UUID userId = getCurrentUserId();
         UserResponse response = userService.changeName(userId, request);
         return ResponseEntity.ok(response);
     }
@@ -70,7 +59,7 @@ public class UserController {
     public ResponseEntity<MessageResponse> requestEmailChange(
             @Valid @RequestBody ChangeEmailRequest request) {
         log.info("Email change request");
-        Long userId = getCurrentUserId();
+        UUID userId = getCurrentUserId();
         MessageResponse response = userService.requestEmailChange(userId, request);
         return ResponseEntity.ok(response);
     }

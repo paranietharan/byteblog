@@ -23,6 +23,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -63,7 +64,7 @@ class AuthServiceTest {
     @BeforeEach
     void setUp() {
         testUser = new User();
-        testUser.setId(1L);
+        testUser.setId(UUID.randomUUID());
         testUser.setName("John Doe");
         testUser.setEmail("john@example.com");
         testUser.setPassword("hashedPassword");
@@ -85,7 +86,6 @@ class AuthServiceTest {
 
     @Test
     void testRegister_Success() {
-        // Arrange
         when(userRepository.existsByEmail(registerRequest.getEmail())).thenReturn(false);
         when(passwordEncoder.encode(registerRequest.getPassword())).thenReturn("hashedPassword");
         when(userRepository.save(any(User.class))).thenReturn(testUser);
@@ -93,10 +93,8 @@ class AuthServiceTest {
         when(tokenProvider.generateRefreshToken()).thenReturn("refreshToken");
         when(tokenProvider.getAccessTokenExpirationMs()).thenReturn(3600000L);
 
-        // Act
         var response = authService.register(registerRequest);
 
-        // Assert
         assertNotNull(response);
         assertEquals(testUser.getId(), response.getId());
         assertEquals(testUser.getEmail(), response.getEmail());
@@ -108,17 +106,16 @@ class AuthServiceTest {
 
     @Test
     void testRegister_EmailAlreadyExists() {
-        // Arrange
         when(userRepository.existsByEmail(registerRequest.getEmail())).thenReturn(true);
+        testUser.setEmailVerified(true);
+        when(userRepository.findByEmail(registerRequest.getEmail())).thenReturn(Optional.of(testUser));
 
-        // Act & Assert
         assertThrows(BadRequestException.class, () -> authService.register(registerRequest));
         verify(userRepository, never()).save(any(User.class));
     }
 
     @Test
     void testLogin_Success() {
-        // Arrange
         testUser.setEmailVerified(true);
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                 .thenReturn(mock(Authentication.class));
@@ -127,10 +124,8 @@ class AuthServiceTest {
         when(tokenProvider.generateRefreshToken()).thenReturn("refreshToken");
         when(tokenProvider.getAccessTokenExpirationMs()).thenReturn(3600000L);
 
-        // Act
         var response = authService.login(loginRequest);
 
-        // Assert
         assertNotNull(response);
         assertEquals(testUser.getId(), response.getId());
         assertEquals("accessToken", response.getAccessToken());
@@ -139,35 +134,28 @@ class AuthServiceTest {
 
     @Test
     void testLogin_EmailNotVerified() {
-        // Arrange
         testUser.setEmailVerified(false);
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                 .thenReturn(mock(Authentication.class));
         when(userRepository.findByEmail(loginRequest.getEmail())).thenReturn(Optional.of(testUser));
 
-        // Act & Assert
         assertThrows(UnauthorizedException.class, () -> authService.login(loginRequest));
     }
 
     @Test
     void testLogin_InvalidCredentials() {
-        // Arrange
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                 .thenThrow(new org.springframework.security.core.AuthenticationException("Invalid credentials") {});
 
-        // Act & Assert
         assertThrows(UnauthorizedException.class, () -> authService.login(loginRequest));
     }
 
     @Test
     void testGetUserByEmail_Success() {
-        // Arrange
         when(userRepository.findByEmail(testUser.getEmail())).thenReturn(Optional.of(testUser));
 
-        // Act
         User user = authService.getUserByEmail(testUser.getEmail());
 
-        // Assert
         assertNotNull(user);
         assertEquals(testUser.getId(), user.getId());
         assertEquals(testUser.getEmail(), user.getEmail());
@@ -175,10 +163,8 @@ class AuthServiceTest {
 
     @Test
     void testGetUserByEmail_NotFound() {
-        // Arrange
         when(userRepository.findByEmail("nonexistent@example.com")).thenReturn(Optional.empty());
 
-        // Act & Assert
         assertThrows(Exception.class, () -> authService.getUserByEmail("nonexistent@example.com"));
     }
 }

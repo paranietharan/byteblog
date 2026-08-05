@@ -20,6 +20,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -48,7 +49,7 @@ class UserServiceTest {
     private UserService userService;
 
     private User testUser;
-    private Long testUserId = 1L;
+    private final UUID testUserId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
@@ -66,13 +67,10 @@ class UserServiceTest {
 
     @Test
     void testGetCurrentUser_Success() {
-        // Arrange
         when(userRepository.findById(testUserId)).thenReturn(Optional.of(testUser));
 
-        // Act
         var response = userService.getCurrentUser(testUserId);
 
-        // Assert
         assertNotNull(response);
         assertEquals(testUser.getId(), response.getId());
         assertEquals(testUser.getName(), response.getName());
@@ -81,16 +79,13 @@ class UserServiceTest {
 
     @Test
     void testGetCurrentUser_NotFound() {
-        // Arrange
         when(userRepository.findById(testUserId)).thenReturn(Optional.empty());
 
-        // Act & Assert
         assertThrows(ResourceNotFoundException.class, () -> userService.getCurrentUser(testUserId));
     }
 
     @Test
     void testChangePassword_Success() {
-        // Arrange
         ChangePasswordRequest request = new ChangePasswordRequest();
         request.setCurrentPassword("oldPassword");
         request.setNewPassword("newPassword123");
@@ -100,10 +95,8 @@ class UserServiceTest {
         when(passwordEncoder.encode(request.getNewPassword())).thenReturn("hashedNewPassword");
         when(userRepository.save(any(User.class))).thenReturn(testUser);
 
-        // Act
         var response = userService.changePassword(testUserId, request);
 
-        // Assert
         assertNotNull(response);
         assertTrue(response.getSuccess());
         verify(userRepository, times(1)).save(any(User.class));
@@ -112,7 +105,6 @@ class UserServiceTest {
 
     @Test
     void testChangePassword_IncorrectCurrentPassword() {
-        // Arrange
         ChangePasswordRequest request = new ChangePasswordRequest();
         request.setCurrentPassword("wrongPassword");
         request.setNewPassword("newPassword123");
@@ -120,37 +112,31 @@ class UserServiceTest {
         when(userRepository.findById(testUserId)).thenReturn(Optional.of(testUser));
         when(passwordEncoder.matches(request.getCurrentPassword(), testUser.getPassword())).thenReturn(false);
 
-        // Act & Assert
         assertThrows(UnauthorizedException.class, () -> userService.changePassword(testUserId, request));
         verify(userRepository, never()).save(any(User.class));
     }
 
     @Test
     void testChangeName_Success() {
-        // Arrange
         ChangeNameRequest request = new ChangeNameRequest();
         request.setName("Jane Doe");
 
         when(userRepository.findById(testUserId)).thenReturn(Optional.of(testUser));
         when(userRepository.save(any(User.class))).thenReturn(testUser);
 
-        // Act
         var response = userService.changeName(testUserId, request);
 
-        // Assert
         assertNotNull(response);
         verify(userRepository, times(1)).save(any(User.class));
     }
 
     @Test
     void testChangeName_UserNotFound() {
-        // Arrange
         ChangeNameRequest request = new ChangeNameRequest();
         request.setName("Jane Doe");
 
         when(userRepository.findById(testUserId)).thenReturn(Optional.empty());
 
-        // Act & Assert
         assertThrows(ResourceNotFoundException.class, () -> userService.changeName(testUserId, request));
     }
 }
