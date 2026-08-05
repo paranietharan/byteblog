@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/byteblog
+    username: postgres
+    password: password
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: true
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: 0
+app:
+  jwt:
+    secret: KbNNRFlJICc4V6Cxi3DTzTgJPsCnTcFA4gHvKygcgkp
+    expiration: 604800000
+    refresh-expiration: 604800000
