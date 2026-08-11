@@ -48,6 +48,11 @@ public class SecurityConfig {
                             response.setContentType("application/json");
                             response.getWriter().write("{\"error\": \"Unauthorized\", \"message\": \"" + authException.getMessage() + "\"}");
                         })
+                        .accessDeniedHandler((request, response, accessDeniedException) -> {
+                            response.setStatus(403);
+                            response.setContentType("application/json");
+                            response.getWriter().write("{\"error\": \"Forbidden\", \"message\": \"Access denied\"}");
+                        })
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
@@ -60,6 +65,16 @@ public class SecurityConfig {
 
                         .requestMatchers(HttpMethod.GET,
                                 "/auth/verify-email"
+                        ).permitAll()
+
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
+
+                        .requestMatchers(HttpMethod.GET, "/posts/mine").authenticated()
+
+                        .requestMatchers(HttpMethod.GET,
+                                "/posts",
+                                "/posts/*",
+                                "/posts/*/comments"
                         ).permitAll()
 
                         .requestMatchers(
