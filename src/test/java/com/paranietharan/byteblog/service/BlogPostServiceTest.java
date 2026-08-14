@@ -42,6 +42,9 @@ class BlogPostServiceTest {
     @Mock
     private AuthenticatedUserService authenticatedUserService;
 
+    @Mock
+    private EmailService emailService;
+
     @InjectMocks
     private BlogPostService blogPostService;
 
@@ -76,6 +79,12 @@ class BlogPostServiceTest {
         assertEquals("spring-boot-postgresql", response.getSlug());
         assertEquals(PostStatus.PUBLISHED, response.getStatus());
         assertNotNull(response.getPublishedAt());
+        verify(emailService).sendPostPublishedNotification(
+                author.getEmail(),
+                author.getName(),
+                response.getTitle(),
+                response.getSlug()
+        );
     }
 
     @Test
@@ -99,6 +108,7 @@ class BlogPostServiceTest {
         User user = new User();
         user.setId(UUID.randomUUID());
         user.setName("Test User");
+        user.setEmail("test@example.com");
         user.setRole(role);
         user.setActive(true);
         user.setEmailVerified(true);

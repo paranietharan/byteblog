@@ -130,6 +130,7 @@ class AuthServiceTest {
         assertEquals(testUser.getId(), response.getId());
         assertEquals("accessToken", response.getAccessToken());
         assertEquals("refreshToken", response.getRefreshToken());
+        verify(emailService).sendLoginNotification(testUser.getEmail(), testUser.getName());
     }
 
     @Test

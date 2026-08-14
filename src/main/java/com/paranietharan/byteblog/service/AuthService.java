@@ -99,6 +99,7 @@ public class AuthService {
         deleteAllEmailVerifcationTokenForUser(user);
 
         log.info("Email verified for user: {}", user.getEmail());
+        emailService.sendWelcomeEmail(user.getEmail(), user.getName());
         return new MessageResponse("Email verified successfully", true);
     }
 
@@ -122,6 +123,7 @@ public class AuthService {
             String refreshToken = generateAndSaveRefreshToken(user);
 
             log.info("User logged in: {}", user.getEmail());
+            emailService.sendLoginNotification(user.getEmail(), user.getName());
             return buildAuthResponse(user, accessToken, refreshToken);
 
         } catch (org.springframework.security.core.AuthenticationException e) {

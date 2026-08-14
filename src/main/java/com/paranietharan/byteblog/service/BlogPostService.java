@@ -34,6 +34,7 @@ public class BlogPostService {
     private final PostCommentRepository commentRepository;
     private final PostLikeRepository likeRepository;
     private final AuthenticatedUserService authenticatedUserService;
+    private final EmailService emailService;
 
     public PostResponse createPost(PostRequest request, User principal) {
         User author = authenticatedUserService.requireVerifiedUser(principal);
@@ -49,13 +50,23 @@ public class BlogPostService {
             post.setPublishedAt(LocalDateTime.now());
         }
 
-        return toResponse(postRepository.save(post), author);
+        BlogPost savedPost = postRepository.save(post);
+        if (savedPost.getStatus() == PostStatus.PUBLISHED) {
+            emailService.sendPostPublishedNotification(
+                    author.getEmail(),
+                    author.getName(),
+                    savedPost.getTitle(),
+                    savedPost.getSlug()
+            );
+        }
+        return toResponse(savedPost, author);
     }
 
     public PostResponse updatePost(UUID postId, PostRequest request, User principal) {
         User actor = authenticatedUserService.requireVerifiedUser(principal);
         BlogPost post = findPost(postId);
         requireOwner(post, actor);
+        boolean wasPublished = post.getStatus() == PostStatus.PUBLISHED;
 
         post.setTitle(request.getTitle().trim());
         post.setExcerpt(normalizeOptionalText(request.getExcerpt()));
@@ -67,7 +78,16 @@ public class BlogPostService {
             post.setPublishedAt(LocalDateTime.now());
         }
 
-        return toResponse(postRepository.save(post), actor);
+        BlogPost savedPost = postRepository.save(post);
+        if (!wasPublished && savedPost.getStatus() == PostStatus.PUBLISHED) {
+            emailService.sendPostPublishedNotification(
+                    savedPost.getAuthor().getEmail(),
+                    savedPost.getAuthor().getName(),
+                    savedPost.getTitle(),
+                    savedPost.getSlug()
+            );
+        }
+        return toResponse(savedPost, actor);
     }
 
     public void deleteOwnPost(UUID postId, User principal) {

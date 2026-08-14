@@ -42,17 +42,25 @@ class PostInteractionServiceTest {
     @Mock
     private AuthenticatedUserService authenticatedUserService;
 
+    @Mock
+    private EmailService emailService;
+
     @InjectMocks
     private PostInteractionService interactionService;
 
     private User user;
+    private User postAuthor;
     private BlogPost post;
 
     @BeforeEach
     void setUp() {
         user = user();
+        postAuthor = user();
         post = new BlogPost();
         post.setId(UUID.randomUUID());
+        post.setAuthor(postAuthor);
+        post.setTitle("Test post");
+        post.setSlug("test-post");
     }
 
     @Test
@@ -65,6 +73,13 @@ class PostInteractionServiceTest {
         var response = interactionService.likePost(post.getId(), user);
 
         verify(likeRepository).save(any(PostLike.class));
+        verify(emailService).sendNewLikeNotification(
+                postAuthor.getEmail(),
+                postAuthor.getName(),
+                user.getName(),
+                post.getTitle(),
+                post.getSlug()
+        );
         assertTrue(response.isLiked());
         assertEquals(1L, response.getLikeCount());
     }
@@ -79,6 +94,27 @@ class PostInteractionServiceTest {
         interactionService.likePost(post.getId(), user);
 
         verify(likeRepository, never()).save(any(PostLike.class));
+        verify(emailService, never()).sendNewLikeNotification(
+                any(), any(), any(), any(), any()
+        );
+    }
+
+    @Test
+    void addCommentNotifiesPostAuthor() {
+        when(authenticatedUserService.requireVerifiedUser(user)).thenReturn(user);
+        when(blogPostService.requirePublicPost(post.getId())).thenReturn(post);
+        when(commentRepository.save(any(PostComment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        interactionService.addComment(post.getId(), new CommentRequest("Helpful article"), user);
+
+        verify(emailService).sendNewCommentNotification(
+                postAuthor.getEmail(),
+                postAuthor.getName(),
+                user.getName(),
+                post.getTitle(),
+                post.getSlug(),
+                "Helpful article"
+        );
     }
 
     @Test
@@ -103,6 +139,8 @@ class PostInteractionServiceTest {
     private User user() {
         User result = new User();
         result.setId(UUID.randomUUID());
+        result.setName("Test User");
+        result.setEmail(result.getId() + "@example.com");
         result.setRole(Role.USER);
         result.setEmailVerified(true);
         result.setActive(true);

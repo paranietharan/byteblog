@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/byteblog}
+    username: ${TEST_DB_USERNAME:postgres}
+    password: ${TEST_DB_PASSWORD:password}
+  jpa:
+    open-in-view: false
+  mail:
+    host: localhost
+    port: 2525
+    username: test@example.com
+    password: test-password
+
+app:
+  jwt:
+    secret: test-jwt-secret-that-is-longer-than-thirty-two-bytes
+    expiration: 3600000
+    refresh-expiration: 604800000
+  mail:
+    enabled: false
+    from: test@example.com
+    from-name: Byteblog Test
+    api-base-url: http://localhost:8080
+    frontend-base-url: http://localhost:3000
+  security:
+    allowed-origins: http://localhost:3000

@@ -32,6 +32,7 @@ public class PostInteractionService {
     private final PostCommentRepository commentRepository;
     private final PostLikeRepository likeRepository;
     private final AuthenticatedUserService authenticatedUserService;
+    private final EmailService emailService;
 
     @Transactional(readOnly = true)
     public PageResponse<CommentResponse> getComments(UUID postId, int page, int size) {
@@ -52,7 +53,18 @@ public class PostInteractionService {
         comment.setAuthor(author);
         comment.setContent(request.getContent().trim());
         comment.setHidden(false);
-        return toCommentResponse(commentRepository.save(comment));
+        PostComment savedComment = commentRepository.save(comment);
+        if (shouldNotifyAuthor(post, author)) {
+            emailService.sendNewCommentNotification(
+                    post.getAuthor().getEmail(),
+                    post.getAuthor().getName(),
+                    author.getName(),
+                    post.getTitle(),
+                    post.getSlug(),
+                    savedComment.getContent()
+            );
+        }
+        return toCommentResponse(savedComment);
     }
 
     public CommentResponse updateComment(UUID commentId, CommentRequest request, User principal) {
@@ -73,11 +85,22 @@ public class PostInteractionService {
     public LikeResponse likePost(UUID postId, User principal) {
         User user = authenticatedUserService.requireVerifiedUser(principal);
         BlogPost post = blogPostService.requirePublicPost(postId);
+        boolean created = false;
         if (!likeRepository.existsByPostAndUser(post, user)) {
             PostLike like = new PostLike();
             like.setPost(post);
             like.setUser(user);
             likeRepository.save(like);
+            created = true;
+        }
+        if (created && shouldNotifyAuthor(post, user)) {
+            emailService.sendNewLikeNotification(
+                    post.getAuthor().getEmail(),
+                    post.getAuthor().getName(),
+                    user.getName(),
+                    post.getTitle(),
+                    post.getSlug()
+            );
         }
         return buildLikeResponse(post, user);
     }
@@ -122,5 +145,11 @@ public class PostInteractionService {
         if (!comment.getAuthor().getId().equals(actor.getId()) && actor.getRole() != Role.ADMIN) {
             throw new ForbiddenException("You can only manage your own comments");
         }
+    }
+
+    private boolean shouldNotifyAuthor(BlogPost post, User actor) {
+        return post.getAuthor() != null
+                && post.getAuthor().getId() != null
+                && !post.getAuthor().getId().equals(actor.getId());
     }
 }

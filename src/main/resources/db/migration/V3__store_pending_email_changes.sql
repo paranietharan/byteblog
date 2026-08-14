@@ -1,0 +1,2 @@
+ALTER TABLE email_verification_tokens
+    ADD COLUMN pending_email VARCHAR(255);

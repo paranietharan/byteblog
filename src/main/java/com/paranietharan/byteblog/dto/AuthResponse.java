@@ -21,6 +21,7 @@ public class AuthResponse {
     private String role;
     private String accessToken;
     private String refreshToken;
+    @Builder.Default
     private String tokenType = "Bearer";
     private Long expiresIn;
     private Boolean emailVerified;

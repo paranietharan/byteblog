@@ -36,6 +36,7 @@ build/
 .idea
 
 # Secrets and config files
-**/main/resources/application.yml
+.env
+
 # OS generated files
 .DS_Store

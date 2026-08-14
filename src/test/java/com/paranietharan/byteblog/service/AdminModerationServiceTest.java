@@ -39,6 +39,9 @@ class AdminModerationServiceTest {
     @Mock
     private AuthenticatedUserService authenticatedUserService;
 
+    @Mock
+    private EmailService emailService;
+
     @InjectMocks
     private AdminModerationService moderationService;
 
@@ -57,7 +60,14 @@ class AdminModerationServiceTest {
     void hidePostRecordsModeratorAndTime() {
         BlogPost post = new BlogPost();
         post.setId(UUID.randomUUID());
+        post.setTitle("Moderated post");
+        post.setSlug("moderated-post");
         post.setHidden(false);
+        User author = new User();
+        author.setId(UUID.randomUUID());
+        author.setName("Author");
+        author.setEmail("author@example.com");
+        post.setAuthor(author);
         when(authenticatedUserService.requireAdmin(admin)).thenReturn(admin);
         when(blogPostService.findPost(post.getId())).thenReturn(post);
 
@@ -67,6 +77,13 @@ class AdminModerationServiceTest {
         assertTrue(post.getHiddenAt() != null);
         assertTrue(post.getHiddenBy() == admin);
         verify(postRepository).save(post);
+        verify(emailService).sendPostModerationNotification(
+                author.getEmail(),
+                author.getName(),
+                post.getTitle(),
+                post.getSlug(),
+                "hidden"
+        );
     }
 
     @Test

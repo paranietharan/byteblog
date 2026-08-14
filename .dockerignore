@@ -1,0 +1,15 @@
+.git
+.gitignore
+.idea
+.vscode
+.env
+.env.*
+!.env.example
+target
+build
+*.iml
+*.log
+Readme.md
+API_ENDPOINTS.md
+docker-compose*.yaml
+docker-compose*.yml
