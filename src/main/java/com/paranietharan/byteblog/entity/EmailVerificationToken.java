@@ -44,6 +44,9 @@ public class EmailVerificationToken {
     @Column(length = 50)
     private String tokenType = "EMAIL_VERIFICATION";
 
+    @Column(length = 255)
+    private String pendingEmail;
+
     public boolean isExpired() {
         return LocalDateTime.now().isAfter(expiryDate);
     }

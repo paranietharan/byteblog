@@ -10,22 +10,19 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class AuthResponse {
-
+public class CommentResponse {
     private UUID id;
-    private String name;
-    private String email;
-    private String role;
-    private String accessToken;
-    private String refreshToken;
-    @Builder.Default
-    private String tokenType = "Bearer";
-    private Long expiresIn;
-    private Boolean emailVerified;
+    private UUID postId;
+    private AuthorResponse author;
+    private String content;
+    private Boolean hidden;
 
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;
+
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime updatedAt;
 }

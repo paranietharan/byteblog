@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.UUID;
 
 @Slf4j
@@ -61,10 +62,11 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        user.setName(request.getName());
+        user.setName(request.getName().trim());
         User updatedUser = userRepository.save(user);
 
         log.info("Name changed for user: {}", user.getEmail());
+        emailService.sendNameChangeNotification(updatedUser.getEmail(), updatedUser.getName());
         return convertToUserResponse(updatedUser);
     }
 
@@ -72,11 +74,12 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        if (userRepository.existsByEmail(request.getNewEmail())) {
+        String newEmail = request.getNewEmail().trim().toLowerCase(Locale.ROOT);
+        if (userRepository.existsByEmail(newEmail)) {
             throw new BadRequestException("Email already registered");
         }
 
-        if (user.getEmail().equals(request.getNewEmail())) {
+        if (user.getEmail().equalsIgnoreCase(newEmail)) {
             throw new BadRequestException("New email must be different from current email");
         }
 
@@ -86,10 +89,11 @@ public class UserService {
         token.setExpiryDate(LocalDateTime.now().plusHours(24));
         token.setUsed(false);
         token.setTokenType("EMAIL_CHANGE");
+        token.setPendingEmail(newEmail);
 
         emailTokenRepository.save(token);
 
-        emailService.sendEmailChangeVerification(request.getNewEmail(), user.getName(), token.getToken());
+        emailService.sendEmailChangeVerification(newEmail, user.getName(), token.getToken());
 
         log.info("Email change requested for user: {}", user.getEmail());
         return new MessageResponse("Verification email sent to new email address", true);
@@ -108,18 +112,27 @@ public class UserService {
         }
 
         User user = emailToken.getUser();
+        String newEmail = emailToken.getPendingEmail();
+        if (newEmail == null || newEmail.isBlank()) {
+            throw new BadRequestException("Email change token does not contain a new email address");
+        }
+        if (userRepository.existsByEmail(newEmail) && !user.getEmail().equalsIgnoreCase(newEmail)) {
+            throw new BadRequestException("Email already registered");
+        }
 
-        user.setEmail(emailToken.getUser().getEmail());
-
+        String oldEmail = user.getEmail();
+        user.setEmail(newEmail);
         user.setEmailVerified(true);
         user.setEmailVerifiedAt(LocalDateTime.now());
         userRepository.save(user);
+        refreshTokenRepository.deleteByUser(user);
 
         emailToken.setUsed(true);
         emailToken.setUsedAt(LocalDateTime.now());
         emailTokenRepository.save(emailToken);
 
-        log.info("Email change verified for user");
+        emailService.sendEmailChangedNotification(oldEmail, newEmail, user.getName());
+        log.info("Email change verified for user: {}", user.getId());
         return new MessageResponse("Email changed successfully", true);
     }
 

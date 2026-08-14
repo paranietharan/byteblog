@@ -2,6 +2,8 @@ package com.paranietharan.byteblog.service;
 
 import com.paranietharan.byteblog.dto.ChangePasswordRequest;
 import com.paranietharan.byteblog.dto.ChangeNameRequest;
+import com.paranietharan.byteblog.dto.ChangeEmailRequest;
+import com.paranietharan.byteblog.entity.EmailVerificationToken;
 import com.paranietharan.byteblog.entity.Role;
 import com.paranietharan.byteblog.entity.User;
 import com.paranietharan.byteblog.exception.BadRequestException;
@@ -25,6 +27,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -138,5 +141,49 @@ class UserServiceTest {
         when(userRepository.findById(testUserId)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> userService.changeName(testUserId, request));
+    }
+
+    @Test
+    void requestEmailChangeStoresRequestedAddress() {
+        ChangeEmailRequest request = new ChangeEmailRequest();
+        request.setNewEmail("NEW@example.com");
+        when(userRepository.findById(testUserId)).thenReturn(Optional.of(testUser));
+        when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
+
+        userService.requestEmailChange(testUserId, request);
+
+        var tokenCaptor = org.mockito.ArgumentCaptor.forClass(EmailVerificationToken.class);
+        verify(emailTokenRepository).save(tokenCaptor.capture());
+        assertEquals("new@example.com", tokenCaptor.getValue().getPendingEmail());
+        verify(emailService).sendEmailChangeVerification(
+                eq("new@example.com"),
+                eq(testUser.getName()),
+                anyString()
+        );
+    }
+
+    @Test
+    void verifyEmailChangeAppliesRequestedAddressAndRevokesRefreshTokens() {
+        EmailVerificationToken token = new EmailVerificationToken();
+        token.setToken("email-change-token");
+        token.setUser(testUser);
+        token.setPendingEmail("new@example.com");
+        token.setTokenType("EMAIL_CHANGE");
+        token.setUsed(false);
+        token.setExpiryDate(LocalDateTime.now().plusHours(1));
+        when(emailTokenRepository.findByToken(token.getToken())).thenReturn(Optional.of(token));
+        when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
+        when(userRepository.save(testUser)).thenReturn(testUser);
+
+        userService.verifyEmailChange(token.getToken());
+
+        assertEquals("new@example.com", testUser.getEmail());
+        assertTrue(token.getUsed());
+        verify(refreshTokenRepository).deleteByUser(testUser);
+        verify(emailService).sendEmailChangedNotification(
+                "john@example.com",
+                "new@example.com",
+                testUser.getName()
+        );
     }
 }
