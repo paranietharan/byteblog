@@ -70,6 +70,8 @@ jobs:
           context: .
           load: true
           push: false
+          pull: true
+          no-cache-filters: runtime
           tags: byteblog-api:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -77,6 +79,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: byteblog-api:ci
+          version: v0.74.0
           format: sarif
           output: trivy-results.sarif
           severity: HIGH,CRITICAL
