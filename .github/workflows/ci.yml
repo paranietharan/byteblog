@@ -75,7 +75,17 @@ jobs:
           tags: byteblog-api:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Scan image
+      - name: Enforce image vulnerability policy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: byteblog-api:ci
+          version: v0.74.0
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Generate SARIF report
+        if: always()
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: byteblog-api:ci
@@ -84,7 +94,7 @@ jobs:
           output: trivy-results.sarif
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          exit-code: "1"
+          exit-code: "0"
       - name: Upload scan results
         if: always()
         uses: github/codeql-action/upload-sarif@v4
