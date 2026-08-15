@@ -10,7 +10,6 @@ import com.paranietharan.byteblog.exception.BadRequestException;
 import com.paranietharan.byteblog.exception.ResourceNotFoundException;
 import com.paranietharan.byteblog.exception.UnauthorizedException;
 import com.paranietharan.byteblog.repository.EmailVerificationTokenRepository;
-import com.paranietharan.byteblog.repository.RefreshTokenRepository;
 import com.paranietharan.byteblog.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,7 +39,7 @@ class UserServiceTest {
     private EmailVerificationTokenRepository emailTokenRepository;
 
     @Mock
-    private RefreshTokenRepository refreshTokenRepository;
+    private RefreshTokenService refreshTokenService;
 
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -103,7 +102,7 @@ class UserServiceTest {
         assertNotNull(response);
         assertTrue(response.getSuccess());
         verify(userRepository, times(1)).save(any(User.class));
-        verify(refreshTokenRepository, times(1)).deleteByUser(testUser);
+        verify(refreshTokenService).revokeAll(testUser);
     }
 
     @Test
@@ -179,7 +178,7 @@ class UserServiceTest {
 
         assertEquals("new@example.com", testUser.getEmail());
         assertTrue(token.getUsed());
-        verify(refreshTokenRepository).deleteByUser(testUser);
+        verify(refreshTokenService).revokeAll(testUser);
         verify(emailService).sendEmailChangedNotification(
                 "john@example.com",
                 "new@example.com",

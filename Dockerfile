@@ -11,7 +11,8 @@ RUN mvn -B -ntp -DskipTests package \
 
 FROM eclipse-temurin:25.0.3_9-jre-alpine AS runtime
 
-RUN addgroup -S byteblog \
+RUN apk upgrade --no-cache \
+    && addgroup -S byteblog \
     && adduser -S -G byteblog -h /app byteblog
 
 WORKDIR /app

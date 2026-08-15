@@ -7,23 +7,36 @@ import com.paranietharan.byteblog.dto.PostResponse;
 import com.paranietharan.byteblog.entity.BlogPost;
 import com.paranietharan.byteblog.entity.PostStatus;
 import com.paranietharan.byteblog.entity.Role;
+import com.paranietharan.byteblog.entity.Tag;
 import com.paranietharan.byteblog.entity.User;
+import com.paranietharan.byteblog.exception.ConflictException;
 import com.paranietharan.byteblog.exception.ForbiddenException;
 import com.paranietharan.byteblog.exception.ResourceNotFoundException;
 import com.paranietharan.byteblog.repository.BlogPostRepository;
 import com.paranietharan.byteblog.repository.PostCommentRepository;
 import com.paranietharan.byteblog.repository.PostLikeRepository;
+import com.paranietharan.byteblog.repository.PostListProjection;
+import com.paranietharan.byteblog.repository.PostTagProjection;
+import com.paranietharan.byteblog.repository.TagRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.text.Normalizer;
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -33,8 +46,10 @@ public class BlogPostService {
     private final BlogPostRepository postRepository;
     private final PostCommentRepository commentRepository;
     private final PostLikeRepository likeRepository;
+    private final TagRepository tagRepository;
     private final AuthenticatedUserService authenticatedUserService;
     private final EmailService emailService;
+    private final JdbcTemplate jdbcTemplate;
 
     public PostResponse createPost(PostRequest request, User principal) {
         User author = authenticatedUserService.requireVerifiedUser(principal);
@@ -43,22 +58,13 @@ public class BlogPostService {
         post.setSlug(generateUniqueSlug(request.getTitle()));
         post.setExcerpt(normalizeOptionalText(request.getExcerpt()));
         post.setContent(request.getContent());
-        post.setStatus(request.getStatus() == null ? PostStatus.DRAFT : request.getStatus());
         post.setAuthor(author);
         post.setHidden(false);
-        if (post.getStatus() == PostStatus.PUBLISHED) {
-            post.setPublishedAt(LocalDateTime.now());
-        }
+        post.setTags(resolveTags(request.getTags()));
+        applyPublicationState(post, request, true);
 
         BlogPost savedPost = postRepository.save(post);
-        if (savedPost.getStatus() == PostStatus.PUBLISHED) {
-            emailService.sendPostPublishedNotification(
-                    author.getEmail(),
-                    author.getName(),
-                    savedPost.getTitle(),
-                    savedPost.getSlug()
-            );
-        }
+        notifyWhenPublished(savedPost, false);
         return toResponse(savedPost, author);
     }
 
@@ -66,27 +72,21 @@ public class BlogPostService {
         User actor = authenticatedUserService.requireVerifiedUser(principal);
         BlogPost post = findPost(postId);
         requireOwner(post, actor);
+        if (request.getVersion() != null && !request.getVersion().equals(post.getVersion())) {
+            throw new ConflictException("Post was modified by another request; reload it before editing");
+        }
         boolean wasPublished = post.getStatus() == PostStatus.PUBLISHED;
 
         post.setTitle(request.getTitle().trim());
         post.setExcerpt(normalizeOptionalText(request.getExcerpt()));
         post.setContent(request.getContent());
-        if (request.getStatus() != null) {
-            post.setStatus(request.getStatus());
+        if (request.getTags() != null) {
+            post.setTags(resolveTags(request.getTags()));
         }
-        if (post.getStatus() == PostStatus.PUBLISHED && post.getPublishedAt() == null) {
-            post.setPublishedAt(LocalDateTime.now());
-        }
+        applyPublicationState(post, request, false);
 
-        BlogPost savedPost = postRepository.save(post);
-        if (!wasPublished && savedPost.getStatus() == PostStatus.PUBLISHED) {
-            emailService.sendPostPublishedNotification(
-                    savedPost.getAuthor().getEmail(),
-                    savedPost.getAuthor().getName(),
-                    savedPost.getTitle(),
-                    savedPost.getSlug()
-            );
-        }
+        BlogPost savedPost = postRepository.saveAndFlush(post);
+        notifyWhenPublished(savedPost, wasPublished);
         return toResponse(savedPost, actor);
     }
 
@@ -105,13 +105,22 @@ public class BlogPostService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<PostResponse> getPublicPosts(String query, int page, int size, User principal) {
+    public PageResponse<PostResponse> getPublicPosts(
+            String query, String tag, int page, int size, User principal) {
         Pageable pageable = PageRequest.of(normalizePage(page), normalizeSize(size));
-        String normalizedQuery = query == null || query.isBlank() ? null : query.trim();
-        Page<PostResponse> posts = postRepository
-                .findPublicPosts(PostStatus.PUBLISHED, normalizedQuery, pageable)
-                .map(post -> toResponse(post, principal));
-        return PageResponse.from(posts);
+        String normalizedQuery = normalizeOptionalText(query);
+        String normalizedTag = tag == null || tag.isBlank() ? null : slugify(tag, 60);
+        UUID viewerId = principal == null ? null : principal.getId();
+        Page<PostListProjection> summaries = postRepository.findPublicPostSummaries(
+                normalizedQuery,
+                normalizedTag,
+                viewerId,
+                pageable
+        );
+        Map<UUID, List<String>> tagsByPost = loadTags(
+                summaries.getContent().stream().map(PostListProjection::getId).toList()
+        );
+        return PageResponse.from(summaries.map(summary -> toResponse(summary, tagsByPost.getOrDefault(summary.getId(), List.of()))));
     }
 
     @Transactional(readOnly = true)
@@ -139,9 +148,11 @@ public class BlogPostService {
         boolean liked = viewer != null
                 && viewer.getId() != null
                 && likeRepository.existsByPostAndUser(post, viewer);
+        List<String> tags = post.getTags().stream().map(Tag::getName).sorted().toList();
 
         return PostResponse.builder()
                 .id(post.getId())
+                .version(post.getVersion())
                 .title(post.getTitle())
                 .slug(post.getSlug())
                 .excerpt(post.getExcerpt())
@@ -152,17 +163,100 @@ public class BlogPostService {
                 .likeCount(likeRepository.countByPostId(post.getId()))
                 .commentCount(commentRepository.countByPostIdAndHiddenFalse(post.getId()))
                 .likedByCurrentUser(liked)
+                .tags(tags)
                 .createdAt(post.getCreatedAt())
                 .updatedAt(post.getUpdatedAt())
                 .publishedAt(post.getPublishedAt())
+                .scheduledPublishAt(post.getScheduledPublishAt())
                 .build();
     }
 
-    private AuthorResponse toAuthorResponse(User author) {
-        return AuthorResponse.builder()
-                .id(author.getId())
-                .name(author.getName())
+    private PostResponse toResponse(PostListProjection post, List<String> tags) {
+        return PostResponse.builder()
+                .id(post.getId())
+                .version(post.getVersion())
+                .title(post.getTitle())
+                .slug(post.getSlug())
+                .excerpt(post.getExcerpt())
+                .content(post.getContent())
+                .status(PostStatus.valueOf(post.getStatus()))
+                .author(AuthorResponse.builder().id(post.getAuthorId()).name(post.getAuthorName()).build())
+                .hidden(post.getHidden())
+                .likeCount(post.getLikeCount())
+                .commentCount(post.getCommentCount())
+                .likedByCurrentUser(Boolean.TRUE.equals(post.getLikedByCurrentUser()))
+                .tags(tags)
+                .createdAt(post.getCreatedAt())
+                .updatedAt(post.getUpdatedAt())
+                .publishedAt(post.getPublishedAt())
+                .scheduledPublishAt(post.getScheduledPublishAt())
                 .build();
+    }
+
+    private void applyPublicationState(BlogPost post, PostRequest request, boolean creating) {
+        LocalDateTime schedule = request.getScheduledPublishAt();
+        if (schedule != null) {
+            post.setStatus(PostStatus.DRAFT);
+            post.setScheduledPublishAt(schedule);
+            return;
+        }
+
+        post.setScheduledPublishAt(null);
+        if (request.getStatus() != null) {
+            post.setStatus(request.getStatus());
+        } else if (creating) {
+            post.setStatus(PostStatus.DRAFT);
+        }
+        if (post.getStatus() == PostStatus.PUBLISHED && post.getPublishedAt() == null) {
+            post.setPublishedAt(LocalDateTime.now());
+        }
+    }
+
+    private void notifyWhenPublished(BlogPost post, boolean wasPublished) {
+        if (!wasPublished && post.getStatus() == PostStatus.PUBLISHED) {
+            emailService.sendPostPublishedNotification(
+                    post.getAuthor().getEmail(),
+                    post.getAuthor().getName(),
+                    post.getTitle(),
+                    post.getSlug()
+            );
+        }
+    }
+
+    private Set<Tag> resolveTags(Collection<String> requestedTags) {
+        if (requestedTags == null || requestedTags.isEmpty()) {
+            return new LinkedHashSet<>();
+        }
+        Map<String, String> uniqueTags = new LinkedHashMap<>();
+        for (String rawTag : requestedTags) {
+            String name = rawTag.trim();
+            String slug = slugify(name, 60);
+            if (!slug.isBlank()) {
+                uniqueTags.putIfAbsent(slug, name);
+            }
+        }
+        Set<Tag> tags = new LinkedHashSet<>();
+        uniqueTags.forEach((slug, name) -> {
+            tagRepository.insertIfAbsent(UUID.randomUUID(), name, slug);
+            tags.add(tagRepository.findBySlug(slug).orElseThrow());
+        });
+        return tags;
+    }
+
+    private Map<UUID, List<String>> loadTags(List<UUID> postIds) {
+        if (postIds.isEmpty()) {
+            return Map.of();
+        }
+        return tagRepository.findTagsForPosts(postIds).stream()
+                .collect(Collectors.groupingBy(
+                        PostTagProjection::getPostId,
+                        LinkedHashMap::new,
+                        Collectors.mapping(PostTagProjection::getTagName, Collectors.toList())
+                ));
+    }
+
+    private AuthorResponse toAuthorResponse(User author) {
+        return AuthorResponse.builder().id(author.getId()).name(author.getName()).build();
     }
 
     private void requireOwner(BlogPost post, User actor) {
@@ -172,23 +266,25 @@ public class BlogPostService {
     }
 
     private String generateUniqueSlug(String title) {
-        String base = Normalizer.normalize(title, Normalizer.Form.NFD)
-                .replaceAll("\\p{M}", "")
-                .toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("(^-|-$)", "");
+        String base = slugify(title, 190);
         if (base.isBlank()) {
             base = "post";
         }
-        if (base.length() > 190) {
-            base = base.substring(0, 190).replaceAll("-$", "");
-        }
-
+        jdbcTemplate.query("SELECT pg_advisory_xact_lock(hashtext(?))", resultSet -> null, base);
         String slug = base;
         while (postRepository.existsBySlug(slug)) {
             slug = base + "-" + UUID.randomUUID().toString().substring(0, 8);
         }
         return slug;
+    }
+
+    private String slugify(String value, int maxLength) {
+        String slug = Normalizer.normalize(value, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("(^-|-$)", "");
+        return slug.length() > maxLength ? slug.substring(0, maxLength).replaceAll("-$", "") : slug;
     }
 
     private String normalizeOptionalText(String value) {

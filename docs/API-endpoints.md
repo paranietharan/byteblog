@@ -2,8 +2,8 @@
 
 ## Conventions
 
-- Local base URL: `http://localhost:8080`
-- The application currently has no `/api/v1` prefix. For example, registration is `POST /auth/register`.
+- Local API base URL: `http://localhost:8080/api/v1`
+- Endpoint paths in this document are relative to `/api/v1`, except `/actuator/**`, `/swagger-ui.html`, and `/v3/api-docs`.
 - Protected endpoints require `Authorization: Bearer <accessToken>`.
 - Request and response bodies use `application/json`, except verification links, which use query parameters.
 - Resource identifiers are UUID strings. A post is read publicly by its generated `slug`, but updated and deleted by UUID.
@@ -39,7 +39,7 @@ Validation:
 
 - `name`: required, 2–100 characters
 - `email`: required, valid email address
-- `password`: required, 6–100 characters
+- `password`: required, 12–100 characters
 
 Returns an `AuthResponse`. If an unverified account already exists for the email, a new verification token is sent and new authentication tokens are returned. A verified duplicate email returns `400`.
 
@@ -61,7 +61,7 @@ The email and password are required. Login returns `401` if the credentials are 
 `GET /auth/verify-email?token={verificationToken}` — Public — returns `200 OK`
 
 ```bash
-curl "http://localhost:8080/auth/verify-email?token=VERIFICATION_TOKEN"
+curl "http://localhost:8080/api/v1/auth/verify-email?token=VERIFICATION_TOKEN"
 ```
 
 The token is valid for 24 hours and can only be used once.
@@ -76,7 +76,7 @@ The token is valid for 24 hours and can only be used once.
 }
 ```
 
-Returns a new access token while keeping the supplied refresh token. Expired, revoked, or unknown tokens are rejected.
+Returns a new access token and a newly rotated refresh token. The supplied refresh token is immediately revoked and must be replaced by the response value. Reuse of a revoked token is treated as replay and revokes the entire token family. Refresh is rejected for inactive or unverified accounts.
 
 ### Logout
 
@@ -121,7 +121,7 @@ Returns a `UserResponse` containing the UUID, name, email, role, active state, v
 }
 ```
 
-The current password is required. The new password must contain 6–100 characters. Changing it revokes existing refresh tokens.
+The current password is required. The new password must contain 12–100 characters. Changing it revokes existing refresh tokens.
 
 ### Change profile name
 
@@ -152,7 +152,7 @@ Sends a confirmation link to the new valid email address. The account email is n
 `GET /users/email/verify-change?token={verificationToken}` — Public — returns `200 OK`
 
 ```bash
-curl "http://localhost:8080/users/email/verify-change?token=VERIFICATION_TOKEN"
+curl "http://localhost:8080/api/v1/users/email/verify-change?token=VERIFICATION_TOKEN"
 ```
 
 ## Posts
@@ -161,9 +161,10 @@ Post content is stored as text. A frontend may send Markdown or sanitized HTML a
 
 ### List public posts
 
-`GET /posts?query={text}&page=0&size=20` — Public — returns `200 OK`
+`GET /posts?query={text}&tag={tagSlug}&page=0&size=20` — Public — returns `200 OK`
 
-- `query`: optional title/content search text
+- `query`: optional PostgreSQL full-text search expression across weighted title, excerpt, and content
+- `tag`: optional normalized tag slug such as `spring-boot`
 - `page`: optional, default `0`
 - `size`: optional, default `20`, maximum `100`
 - Only published, non-hidden posts are returned.
@@ -190,7 +191,9 @@ Returns the current author's drafts and published posts, including hidden state.
   "title": "Production-ready Spring Boot",
   "excerpt": "A short introduction",
   "content": "# Heading\n\nPost content in Markdown.",
-  "status": "PUBLISHED"
+  "status": "PUBLISHED",
+  "scheduledPublishAt": null,
+  "tags": ["Spring Boot", "PostgreSQL"]
 }
 ```
 
@@ -200,13 +203,16 @@ Validation and behavior:
 - `excerpt`: optional, maximum 500 characters
 - `content`: required
 - `status`: optional; allowed values are `DRAFT` and `PUBLISHED`; default is `DRAFT`
+- `scheduledPublishAt`: optional future date-time; when present, the post remains `DRAFT` until the scheduled worker publishes it
+- `tags`: optional, at most 5 unique tags of at most 50 characters each
+- `version`: include the latest response version when updating to detect stale concurrent edits
 - The slug is generated once from the title and made unique automatically.
 
 ### Update post
 
 `PUT /posts/{postId}` — Verified owner or admin — returns `200 OK`
 
-Uses the same body and validation as create. If `status` is omitted, the existing status is retained. The existing slug is retained when the title changes.
+Uses the same body and validation as create. If `status` is omitted, the existing status is retained. The existing slug is retained when the title changes. A stale `version` returns `409 Conflict`.
 
 ### Delete own post
 
@@ -297,9 +303,9 @@ These endpoints are public and do not expose component details.
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| `GET` | `/actuator/health` | Overall application health |
-| `GET` | `/actuator/health/liveness` | Process liveness probe |
-| `GET` | `/actuator/health/readiness` | Application readiness probe |
+| `GET` | `http://localhost:8080/actuator/health` | Overall application health |
+| `GET` | `http://localhost:8080/actuator/health/liveness` | Process liveness probe |
+| `GET` | `http://localhost:8080/actuator/health/readiness` | Application readiness probe |
 
 Successful response:
 
@@ -335,6 +341,7 @@ Successful response:
 ```json
 {
   "id": "4bb7e729-827b-45e6-ab7b-3b69f4b67cdf",
+  "version": 0,
   "title": "Production-ready Spring Boot",
   "slug": "production-ready-spring-boot",
   "excerpt": "A short introduction",
@@ -348,9 +355,11 @@ Successful response:
   "likeCount": 12,
   "commentCount": 3,
   "likedByCurrentUser": true,
+  "tags": ["PostgreSQL", "Spring Boot"],
   "createdAt": "2026-08-12T10:00:00",
   "updatedAt": "2026-08-12T10:00:00",
-  "publishedAt": "2026-08-12T10:00:00"
+  "publishedAt": "2026-08-12T10:00:00",
+  "scheduledPublishAt": null
 }
 ```
 
@@ -451,26 +460,26 @@ Common status codes:
 Register:
 
 ```bash
-curl --request POST "http://localhost:8080/auth/register" \
+curl --request POST "http://localhost:8080/api/v1/auth/register" \
   --header "Content-Type: application/json" \
   --data '{
     "name": "Paranietharan",
     "email": "parani@example.com",
-    "password": "password123"
+    "password": "correct-horse-battery-staple"
   }'
 ```
 
 Get the current user:
 
 ```bash
-curl "http://localhost:8080/users/me" \
+curl "http://localhost:8080/api/v1/users/me" \
   --header "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
 Publish a post:
 
 ```bash
-curl --request POST "http://localhost:8080/posts" \
+curl --request POST "http://localhost:8080/api/v1/posts" \
   --header "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   --header "Content-Type: application/json" \
   --data '{

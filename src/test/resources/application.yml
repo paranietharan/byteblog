@@ -1,10 +1,13 @@
 spring:
   datasource:
     url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/byteblog}
-    username: ${TEST_DB_USERNAME:postgres}
-    password: ${TEST_DB_PASSWORD:password}
+    username: ${TEST_DB_USERNAME:byteblog}
+    password: ${TEST_DB_PASSWORD:replace-with-a-strong-local-password}
   jpa:
     open-in-view: false
+    properties:
+      hibernate:
+        generate_statistics: true
   mail:
     host: localhost
     port: 2525
@@ -24,3 +27,5 @@ app:
     frontend-base-url: http://localhost:3000
   security:
     allowed-origins: http://localhost:3000
+    rate-limit:
+      enabled: false

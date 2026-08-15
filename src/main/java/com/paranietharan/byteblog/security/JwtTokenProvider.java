@@ -12,7 +12,6 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
-import java.util.UUID;
 
 @Slf4j
 @Component
@@ -60,10 +59,6 @@ public class JwtTokenProvider {
                 .compact();
     }
 
-    public String generateRefreshToken() {
-        return UUID.randomUUID().toString();
-    }
-
     public String getEmailFromToken(String token) {
         Claims claims = Jwts.parser()
                 .verifyWith(getSigningKey())
@@ -99,7 +94,4 @@ public class JwtTokenProvider {
         return jwtExpirationMs;
     }
 
-    public long getRefreshTokenExpirationMs() {
-        return refreshTokenExpirationMs;
-    }
 }

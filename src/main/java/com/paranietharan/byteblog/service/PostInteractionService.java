@@ -7,7 +7,6 @@ import com.paranietharan.byteblog.dto.LikeResponse;
 import com.paranietharan.byteblog.dto.PageResponse;
 import com.paranietharan.byteblog.entity.BlogPost;
 import com.paranietharan.byteblog.entity.PostComment;
-import com.paranietharan.byteblog.entity.PostLike;
 import com.paranietharan.byteblog.entity.Role;
 import com.paranietharan.byteblog.entity.User;
 import com.paranietharan.byteblog.exception.ForbiddenException;
@@ -85,14 +84,7 @@ public class PostInteractionService {
     public LikeResponse likePost(UUID postId, User principal) {
         User user = authenticatedUserService.requireVerifiedUser(principal);
         BlogPost post = blogPostService.requirePublicPost(postId);
-        boolean created = false;
-        if (!likeRepository.existsByPostAndUser(post, user)) {
-            PostLike like = new PostLike();
-            like.setPost(post);
-            like.setUser(user);
-            likeRepository.save(like);
-            created = true;
-        }
+        boolean created = likeRepository.insertIfAbsent(UUID.randomUUID(), post.getId(), user.getId()) == 1;
         if (created && shouldNotifyAuthor(post, user)) {
             emailService.sendNewLikeNotification(
                     post.getAuthor().getEmail(),

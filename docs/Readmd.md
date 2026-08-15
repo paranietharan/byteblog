@@ -2,6 +2,8 @@
 
 Byteblog is a production-oriented Spring Boot REST API for a blogging platform. It supports UUID-based users and content, JWT authentication, email verification, author-managed posts, comments, likes, admin moderation, Gmail notifications, PostgreSQL, and Flyway database migrations.
 
+The public REST API is versioned under `/api/v1`. Interactive OpenAPI documentation is available at `/swagger-ui.html`, and the OpenAPI document is available at `/v3/api-docs`.
+
 See [API-endpoints.md](./API-endpoints.md) for complete endpoint and request details.
 
 ## Requirements
@@ -99,6 +101,9 @@ Do not include a trailing slash in the base URLs.
 | `MAIL_CONNECTION_TIMEOUT_MS` | SMTP connection timeout | `5000` |
 | `MAIL_TIMEOUT_MS` | SMTP read timeout | `5000` |
 | `MAIL_WRITE_TIMEOUT_MS` | SMTP write timeout | `5000` |
+| `MAIL_OUTBOX_BATCH_SIZE` | Maximum records claimed per worker run | `20` |
+| `MAIL_OUTBOX_MAX_ATTEMPTS` | Delivery attempts before terminal failure | `5` |
+| `MAIL_OUTBOX_FIXED_DELAY_MS` | Delay between outbox worker runs | `5000` |
 
 To enable Gmail:
 
@@ -117,6 +122,10 @@ MAIL_FROM_NAME=Byteblog
 Use the app password, not the normal Google account password. When mail is disabled, messages are skipped and verification tokens are not written to application logs.
 
 Enable mail when testing the complete registration and email-change verification flows, because those tokens are intentionally neither returned by the API nor logged.
+
+### Authentication protection and scheduled publishing
+
+Authentication rate limits are enabled by default and persisted in PostgreSQL. `.env.example` exposes limits and windows for login, registration, refresh, and verification routes. Scheduled publication uses `SCHEDULED_PUBLISH_BATCH_SIZE` and `SCHEDULED_PUBLISH_DELAY_MS`.
 
 ## Run the complete local stack
 

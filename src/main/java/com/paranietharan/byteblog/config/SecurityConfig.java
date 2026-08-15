@@ -1,5 +1,6 @@
 package com.paranietharan.byteblog.config;
 
+import com.paranietharan.byteblog.security.AuthRateLimitFilter;
 import com.paranietharan.byteblog.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -30,6 +31,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final AuthRateLimitFilter authRateLimitFilter;
     private final UserDetailsService userDetailsService;
     private final SecurityProperties securityProperties;
 
@@ -69,24 +71,24 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
 
                         .requestMatchers(HttpMethod.POST,
-                                "/auth/login",
-                                "/auth/register",
-                                "/auth/refresh-token"
+                                "/api/v1/auth/login",
+                                "/api/v1/auth/register",
+                                "/api/v1/auth/refresh-token"
                         ).permitAll()
 
                         .requestMatchers(HttpMethod.GET,
-                                "/auth/verify-email",
-                                "/users/email/verify-change"
+                                "/api/v1/auth/verify-email",
+                                "/api/v1/users/email/verify-change"
                         ).permitAll()
 
-                        .requestMatchers("/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
 
-                        .requestMatchers(HttpMethod.GET, "/posts/mine").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/posts/mine").authenticated()
 
                         .requestMatchers(HttpMethod.GET,
-                                "/posts",
-                                "/posts/*",
-                                "/posts/*/comments"
+                                "/api/v1/posts",
+                                "/api/v1/posts/*",
+                                "/api/v1/posts/*/comments"
                         ).permitAll()
 
                         .requestMatchers(
@@ -101,6 +103,7 @@ public class SecurityConfig {
 
                         .anyRequest().authenticated()
                 )
+                .addFilterBefore(authRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

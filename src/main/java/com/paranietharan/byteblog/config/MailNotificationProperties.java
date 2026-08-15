@@ -15,4 +15,7 @@ public class MailNotificationProperties {
     private String fromName = "Byteblog";
     private String apiBaseUrl;
     private String frontendBaseUrl;
+    private int outboxBatchSize = 20;
+    private int outboxMaxAttempts = 5;
+    private int outboxProcessingTimeoutMinutes = 15;
 }
