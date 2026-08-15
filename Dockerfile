@@ -9,7 +9,7 @@ COPY src ./src
 RUN mvn -B -ntp -DskipTests package \
     && cp target/byteblog-*.jar /workspace/application.jar
 
-FROM eclipse-temurin:25.0.3_9-jre-alpine AS runtime
+FROM eclipse-temurin:26.0.1_8-jre-alpine AS runtime
 
 RUN apk upgrade --no-cache \
     && addgroup -S byteblog \
