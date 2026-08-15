@@ -3,7 +3,6 @@ package com.paranietharan.byteblog.service;
 import com.paranietharan.byteblog.dto.CommentRequest;
 import com.paranietharan.byteblog.entity.BlogPost;
 import com.paranietharan.byteblog.entity.PostComment;
-import com.paranietharan.byteblog.entity.PostLike;
 import com.paranietharan.byteblog.entity.Role;
 import com.paranietharan.byteblog.entity.User;
 import com.paranietharan.byteblog.exception.ForbiddenException;
@@ -67,12 +66,13 @@ class PostInteractionServiceTest {
     void likePostIsIdempotent() {
         when(authenticatedUserService.requireVerifiedUser(user)).thenReturn(user);
         when(blogPostService.requirePublicPost(post.getId())).thenReturn(post);
-        when(likeRepository.existsByPostAndUser(post, user)).thenReturn(false, true);
+        when(likeRepository.insertIfAbsent(any(UUID.class), any(UUID.class), any(UUID.class))).thenReturn(1);
+        when(likeRepository.existsByPostAndUser(post, user)).thenReturn(true);
         when(likeRepository.countByPostId(post.getId())).thenReturn(1L);
 
         var response = interactionService.likePost(post.getId(), user);
 
-        verify(likeRepository).save(any(PostLike.class));
+        verify(likeRepository).insertIfAbsent(any(UUID.class), any(UUID.class), any(UUID.class));
         verify(emailService).sendNewLikeNotification(
                 postAuthor.getEmail(),
                 postAuthor.getName(),
@@ -88,12 +88,13 @@ class PostInteractionServiceTest {
     void likePostDoesNotCreateDuplicateLike() {
         when(authenticatedUserService.requireVerifiedUser(user)).thenReturn(user);
         when(blogPostService.requirePublicPost(post.getId())).thenReturn(post);
+        when(likeRepository.insertIfAbsent(any(UUID.class), any(UUID.class), any(UUID.class))).thenReturn(0);
         when(likeRepository.existsByPostAndUser(post, user)).thenReturn(true);
         when(likeRepository.countByPostId(post.getId())).thenReturn(1L);
 
         interactionService.likePost(post.getId(), user);
 
-        verify(likeRepository, never()).save(any(PostLike.class));
+        verify(likeRepository).insertIfAbsent(any(UUID.class), any(UUID.class), any(UUID.class));
         verify(emailService, never()).sendNewLikeNotification(
                 any(), any(), any(), any(), any()
         );

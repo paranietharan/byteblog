@@ -7,7 +7,6 @@ import com.paranietharan.byteblog.entity.User;
 import com.paranietharan.byteblog.exception.BadRequestException;
 import com.paranietharan.byteblog.exception.UnauthorizedException;
 import com.paranietharan.byteblog.repository.EmailVerificationTokenRepository;
-import com.paranietharan.byteblog.repository.RefreshTokenRepository;
 import com.paranietharan.byteblog.repository.UserRepository;
 import com.paranietharan.byteblog.security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,7 +39,7 @@ class AuthServiceTest {
     private EmailVerificationTokenRepository emailTokenRepository;
 
     @Mock
-    private RefreshTokenRepository refreshTokenRepository;
+    private RefreshTokenService refreshTokenService;
 
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -77,11 +76,11 @@ class AuthServiceTest {
         registerRequest = new RegisterRequest();
         registerRequest.setName("John Doe");
         registerRequest.setEmail("john@example.com");
-        registerRequest.setPassword("password123");
+        registerRequest.setPassword("password12345");
 
         loginRequest = new LoginRequest();
         loginRequest.setEmail("john@example.com");
-        loginRequest.setPassword("password123");
+        loginRequest.setPassword("password12345");
     }
 
     @Test
@@ -90,7 +89,7 @@ class AuthServiceTest {
         when(passwordEncoder.encode(registerRequest.getPassword())).thenReturn("hashedPassword");
         when(userRepository.save(any(User.class))).thenReturn(testUser);
         when(tokenProvider.generateAccessTokenFromEmail(anyString())).thenReturn("accessToken");
-        when(tokenProvider.generateRefreshToken()).thenReturn("refreshToken");
+        when(refreshTokenService.issue(testUser)).thenReturn("refreshToken");
         when(tokenProvider.getAccessTokenExpirationMs()).thenReturn(3600000L);
 
         var response = authService.register(registerRequest);
@@ -121,7 +120,7 @@ class AuthServiceTest {
                 .thenReturn(mock(Authentication.class));
         when(userRepository.findByEmail(loginRequest.getEmail())).thenReturn(Optional.of(testUser));
         when(tokenProvider.generateAccessToken(any(Authentication.class))).thenReturn("accessToken");
-        when(tokenProvider.generateRefreshToken()).thenReturn("refreshToken");
+        when(refreshTokenService.issue(testUser)).thenReturn("refreshToken");
         when(tokenProvider.getAccessTokenExpirationMs()).thenReturn(3600000L);
 
         var response = authService.login(loginRequest);

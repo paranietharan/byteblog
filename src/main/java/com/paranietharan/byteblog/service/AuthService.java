@@ -2,13 +2,11 @@ package com.paranietharan.byteblog.service;
 
 import com.paranietharan.byteblog.dto.*;
 import com.paranietharan.byteblog.entity.EmailVerificationToken;
-import com.paranietharan.byteblog.entity.RefreshToken;
 import com.paranietharan.byteblog.entity.User;
 import com.paranietharan.byteblog.exception.BadRequestException;
 import com.paranietharan.byteblog.exception.ResourceNotFoundException;
 import com.paranietharan.byteblog.exception.UnauthorizedException;
 import com.paranietharan.byteblog.repository.EmailVerificationTokenRepository;
-import com.paranietharan.byteblog.repository.RefreshTokenRepository;
 import com.paranietharan.byteblog.repository.UserRepository;
 import com.paranietharan.byteblog.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +29,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final EmailVerificationTokenRepository emailTokenRepository;
-    private final RefreshTokenRepository refreshTokenRepository;
+    private final RefreshTokenService refreshTokenService;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider tokenProvider;
@@ -50,7 +48,7 @@ public class AuthService {
                 log.info("Verification email sent to: {}", existingUser.getEmail());
 
                 String accessToken = tokenProvider.generateAccessTokenFromEmail(existingUser.getEmail());
-                String refreshToken = generateAndSaveRefreshToken(existingUser);
+                String refreshToken = refreshTokenService.issue(existingUser);
 
                 return buildAuthResponse(existingUser, accessToken, refreshToken);
             }
@@ -74,7 +72,7 @@ public class AuthService {
         log.info("Verification email sent to: {}", savedUser.getEmail());
 
         String accessToken = tokenProvider.generateAccessTokenFromEmail(savedUser.getEmail());
-        String refreshToken = generateAndSaveRefreshToken(savedUser);
+        String refreshToken = refreshTokenService.issue(savedUser);
 
         return buildAuthResponse(savedUser, accessToken, refreshToken);
     }
@@ -120,7 +118,7 @@ public class AuthService {
             }
 
             String accessToken = tokenProvider.generateAccessToken(authentication);
-            String refreshToken = generateAndSaveRefreshToken(user);
+            String refreshToken = refreshTokenService.issue(user);
 
             log.info("User logged in: {}", user.getEmail());
             emailService.sendLoginNotification(user.getEmail(), user.getName());
@@ -133,14 +131,8 @@ public class AuthService {
     }
 
     public AuthResponse refreshAccessToken(RefreshTokenRequest request) {
-        RefreshToken refreshToken = refreshTokenRepository.findByToken(request.getRefreshToken())
-                .orElseThrow(() -> new BadRequestException("Invalid refresh token"));
-
-        if (!refreshToken.isValid()) {
-            throw new UnauthorizedException("Refresh token expired or revoked");
-        }
-
-        User user = refreshToken.getUser();
+        RefreshTokenService.RotationResult rotation = refreshTokenService.rotate(request.getRefreshToken());
+        User user = rotation.user();
         String newAccessToken = tokenProvider.generateAccessTokenFromEmail(user.getEmail());
 
         log.info("Access token refreshed for user: {}", user.getEmail());
@@ -150,7 +142,7 @@ public class AuthService {
                 .email(user.getEmail())
                 .role(user.getRole().name())
                 .accessToken(newAccessToken)
-                .refreshToken(request.getRefreshToken())
+                .refreshToken(rotation.refreshToken())
                 .tokenType("Bearer")
                 .expiresIn(tokenProvider.getAccessTokenExpirationMs() / 1000)
                 .emailVerified(user.getEmailVerified())
@@ -159,26 +151,10 @@ public class AuthService {
     }
 
     public MessageResponse logout(String refreshToken) {
-        RefreshToken token = refreshTokenRepository.findByToken(refreshToken)
-                .orElseThrow(() -> new BadRequestException("Invalid refresh token"));
-
-        token.setRevoked(true);
-        token.setRevokedAt(LocalDateTime.now());
-        refreshTokenRepository.save(token);
+        refreshTokenService.revoke(refreshToken);
 
         log.info("User logged out");
         return new MessageResponse("Logged out successfully", true);
-    }
-
-    private String generateAndSaveRefreshToken(User user) {
-        RefreshToken refreshToken = new RefreshToken();
-        refreshToken.setToken(tokenProvider.generateRefreshToken());
-        refreshToken.setUser(user);
-        refreshToken.setExpiryDate(LocalDateTime.now().plusSeconds(tokenProvider.getRefreshTokenExpirationMs() / 1000));
-        refreshToken.setRevoked(false);
-
-        refreshTokenRepository.save(refreshToken);
-        return refreshToken.getToken();
     }
 
     private String generateAndSaveEmailVerificationToken(User user) {

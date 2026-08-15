@@ -7,7 +7,6 @@ import com.paranietharan.byteblog.exception.BadRequestException;
 import com.paranietharan.byteblog.exception.ResourceNotFoundException;
 import com.paranietharan.byteblog.exception.UnauthorizedException;
 import com.paranietharan.byteblog.repository.EmailVerificationTokenRepository;
-import com.paranietharan.byteblog.repository.RefreshTokenRepository;
 import com.paranietharan.byteblog.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +26,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final EmailVerificationTokenRepository emailTokenRepository;
-    private final RefreshTokenRepository refreshTokenRepository;
+    private final RefreshTokenService refreshTokenService;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
 
@@ -50,7 +49,7 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
 
-        refreshTokenRepository.deleteByUser(user);
+        refreshTokenService.revokeAll(user);
 
         log.info("Password changed for user: {}", user.getEmail());
         emailService.sendPasswordChangeNotification(user.getEmail(), user.getName());
@@ -125,7 +124,7 @@ public class UserService {
         user.setEmailVerified(true);
         user.setEmailVerifiedAt(LocalDateTime.now());
         userRepository.save(user);
-        refreshTokenRepository.deleteByUser(user);
+        refreshTokenService.revokeAll(user);
 
         emailToken.setUsed(true);
         emailToken.setUsedAt(LocalDateTime.now());

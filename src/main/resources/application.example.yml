@@ -1,0 +1,88 @@
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  forward-headers-strategy: framework
+  compression:
+    enabled: true
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+
+spring:
+  application:
+    name: byteblog
+  lifecycle:
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:30s}
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:30000}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    clean-disabled: true
+    validate-on-migrate: true
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_APP_PASSWORD:}
+
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_API_DOCS_ENABLED}
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED}
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    expiration: ${JWT_EXPIRATION_MS}
+    refresh-expiration: ${JWT_REFRESH_EXPIRATION_MS}
+  mail:
+    enabled: ${MAIL_ENABLED:false}
+    from: ${MAIL_FROM:${MAIL_USERNAME:}}
+    from-name: ${MAIL_FROM_NAME:Byteblog}
+    api-base-url: ${APP_API_BASE_URL}
+    frontend-base-url: ${APP_FRONTEND_BASE_URL}
+    outbox-batch-size: ${MAIL_OUTBOX_BATCH_SIZE:20}
+    outbox-max-attempts: ${MAIL_OUTBOX_MAX_ATTEMPTS:5}
+    outbox-processing-timeout-minutes: ${MAIL_OUTBOX_PROCESSING_TIMEOUT_MINUTES:15}
+    outbox-fixed-delay-ms: ${MAIL_OUTBOX_FIXED_DELAY_MS:5000}
+    outbox-recovery-delay-ms: ${MAIL_OUTBOX_RECOVERY_DELAY_MS:60000}
+  security:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:${APP_FRONTEND_BASE_URL}}
+    rate-limit:
+      enabled: ${AUTH_RATE_LIMIT_ENABLED:true}
+      login-limit: ${AUTH_LOGIN_LIMIT:10}
+      login-window-seconds: ${AUTH_LOGIN_WINDOW_SECONDS:60}
+      registration-limit: ${AUTH_REGISTRATION_LIMIT:5}
+      registration-window-seconds: ${AUTH_REGISTRATION_WINDOW_SECONDS:3600}
+      refresh-limit: ${AUTH_REFRESH_LIMIT:20}
+      refresh-window-seconds: ${AUTH_REFRESH_WINDOW_SECONDS:60}
+      verification-limit: ${AUTH_VERIFICATION_LIMIT:20}
+      verification-window-seconds: ${AUTH_VERIFICATION_WINDOW_SECONDS:3600}
+  posts:
+    scheduled-publish-batch-size: ${SCHEDULED_PUBLISH_BATCH_SIZE:50}
+    scheduled-publish-delay-ms: ${SCHEDULED_PUBLISH_DELAY_MS:30000}

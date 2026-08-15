@@ -7,6 +7,9 @@ import com.paranietharan.byteblog.dto.MessageResponse;
 import com.paranietharan.byteblog.dto.PageResponse;
 import com.paranietharan.byteblog.entity.User;
 import com.paranietharan.byteblog.service.PostInteractionService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -27,11 +30,13 @@ import java.util.UUID;
 @RestController
 @RequestMapping
 @RequiredArgsConstructor
+@Tag(name = "Interactions", description = "Comments and idempotent post likes")
 public class PostInteractionController {
 
     private final PostInteractionService interactionService;
 
-    @GetMapping("/posts/{postId}/comments")
+    @GetMapping("/api/v1/posts/{postId}/comments")
+    @Operation(summary = "List visible comments")
     public ResponseEntity<PageResponse<CommentResponse>> getComments(
             @PathVariable UUID postId,
             @RequestParam(defaultValue = "0") int page,
@@ -39,7 +44,8 @@ public class PostInteractionController {
         return ResponseEntity.ok(interactionService.getComments(postId, page, size));
     }
 
-    @PostMapping("/posts/{postId}/comments")
+    @PostMapping("/api/v1/posts/{postId}/comments")
+    @Operation(summary = "Add a comment", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<CommentResponse> addComment(
             @PathVariable UUID postId,
             @Valid @RequestBody CommentRequest request,
@@ -50,7 +56,8 @@ public class PostInteractionController {
         );
     }
 
-    @PutMapping("/comments/{commentId}")
+    @PutMapping("/api/v1/comments/{commentId}")
+    @Operation(summary = "Update an owned comment", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<CommentResponse> updateComment(
             @PathVariable UUID commentId,
             @Valid @RequestBody CommentRequest request,
@@ -58,7 +65,8 @@ public class PostInteractionController {
         return ResponseEntity.ok(interactionService.updateComment(commentId, request, currentUser));
     }
 
-    @DeleteMapping("/comments/{commentId}")
+    @DeleteMapping("/api/v1/comments/{commentId}")
+    @Operation(summary = "Delete an owned comment", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<MessageResponse> deleteComment(
             @PathVariable UUID commentId,
             @AuthenticationPrincipal User currentUser) {
@@ -66,14 +74,16 @@ public class PostInteractionController {
         return ResponseEntity.ok(new MessageResponse("Comment deleted successfully", true));
     }
 
-    @PostMapping("/posts/{postId}/like")
+    @PostMapping("/api/v1/posts/{postId}/like")
+    @Operation(summary = "Like a post", description = "Idempotent and protected by a database uniqueness constraint.", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<LikeResponse> likePost(
             @PathVariable UUID postId,
             @AuthenticationPrincipal User currentUser) {
         return ResponseEntity.ok(interactionService.likePost(postId, currentUser));
     }
 
-    @DeleteMapping("/posts/{postId}/like")
+    @DeleteMapping("/api/v1/posts/{postId}/like")
+    @Operation(summary = "Unlike a post", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<LikeResponse> unlikePost(
             @PathVariable UUID postId,
             @AuthenticationPrincipal User currentUser) {

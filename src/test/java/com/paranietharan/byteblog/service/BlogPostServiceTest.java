@@ -9,6 +9,7 @@ import com.paranietharan.byteblog.exception.ForbiddenException;
 import com.paranietharan.byteblog.repository.BlogPostRepository;
 import com.paranietharan.byteblog.repository.PostCommentRepository;
 import com.paranietharan.byteblog.repository.PostLikeRepository;
+import com.paranietharan.byteblog.repository.TagRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,6 +17,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -38,6 +40,12 @@ class BlogPostServiceTest {
 
     @Mock
     private PostLikeRepository likeRepository;
+
+    @Mock
+    private TagRepository tagRepository;
+
+    @Mock
+    private JdbcTemplate jdbcTemplate;
 
     @Mock
     private AuthenticatedUserService authenticatedUserService;

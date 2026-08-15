@@ -21,8 +21,15 @@ public class RefreshToken {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false, unique = true, columnDefinition = "TEXT")
-    private String token;
+    @Column(nullable = false, unique = true, length = 64)
+    private String tokenHash;
+
+    @Column(nullable = false)
+    private UUID familyId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_token_id")
+    private RefreshToken parentToken;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
@@ -40,6 +47,12 @@ public class RefreshToken {
 
     @Column
     private LocalDateTime revokedAt;
+
+    @Column
+    private LocalDateTime rotatedAt;
+
+    @Column(nullable = false)
+    private Boolean reuseDetected = false;
 
     public boolean isExpired() {
         return LocalDateTime.now().isAfter(expiryDate);
